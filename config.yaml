@@ -28,6 +28,16 @@ model:
   optimizer: 'adam'
   loss: 'mse'
   metrics: 'mae'
+  xgb:
+    objective: 'reg:squarederror'
+    booster: 'gbtree'
+    eta: [0.01, 0.3]
+    max_depth: [3, 10]
+    eval_metric: 'mae'
+    sum_parallel_tree: [1, 2]
+    subsample: [0.5, 1.0]
+    tree_method: ['hist', 'approx', 'exact']
+    num_local_round: [1, 10]
 
 data:
   pv_path: './SolarFarm/'
@@ -40,5 +50,5 @@ data:
   test_start: '2022-04-01' #'2022-01-01'
 
 hw:
-  num_cpu: 50
-  num_gpu: 1
+  num_cpu: 8
+  num_gpu: 0.5
