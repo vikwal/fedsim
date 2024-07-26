@@ -2,17 +2,33 @@ import yaml
 import json
 import pickle
 import pandas as pd
+from logging import INFO, DEBUG
 
 from sklearn.model_selection import TimeSeriesSplit
 
 import flwr as fl
 from flwr.common import Metrics
+from flwr.common.logger import log
+from flwr.server.strategy import FedXgbBagging
 from flwr.simulation.ray_transport.utils import enable_tf_gpu_growth
+from flwr.common import (
+    Code,
+    EvaluateIns,
+    EvaluateRes,
+    FitIns,
+    FitRes,
+    GetParametersIns,
+    GetParametersRes,
+    Parameters,
+    Status,
+)
 
 import optuna
+import xgboost as xgb
 
 from typing import Dict, List, Tuple
 
+import client_utils
 import preprocessing
 import models
 
@@ -22,75 +38,8 @@ with open('config.yaml','r') as file_object:
  
 output_dim = config['model']['output_dim']
 verbose = config['fl']['verbose']
- 
-class FlowerClient(fl.client.NumPyClient):
-    def __init__(self, cid, x_train, y_train, x_val, y_val, hyperparameters) -> None:
-        self.cid = cid
-        self.x_train, self.y_train = x_train, y_train
-        self.x_val, self.y_val = x_val, y_val
-        self.model = models.get_model(self.x_train.shape[2], 
-                                      output_dim,
-                                      hyperparameters) 
 
-    def get_parameters(self, config):
-        return self.model.get_weights()
 
-    def fit(self, parameters, config):
-
-        batch_size: int = config["batch_size"]
-        local_epochs: int = config["local_epochs"]
-        fit_metrics_agg: bool = config["fit_metrics_agg"]
-        
-        self.model.set_weights(parameters)
-        history = self.model.fit(
-                self.x_train, 
-                self.y_train, 
-                epochs=local_epochs, 
-                batch_size=batch_size,
-                validation_data=(self.x_val, self.y_val), 
-                verbose=verbose,
-                shuffle = False
-        )
-        if fit_metrics_agg:
-            loss = history.history['loss']
-            val_loss = history.history['val_loss']
-            mae = history.history['mae']
-            val_mae = history.history['val_mae']
-            
-            loss_per_epoch = json.dumps(loss)
-            val_loss_per_epoch = json.dumps(val_loss)
-            mae_per_epoch = json.dumps(mae)
-            val_mae_per_epoch = json.dumps(val_mae)
-        
-        return self.model.get_weights(), len(self.x_train), {'loss_per_client_and_epoch': f'{self.cid}:{loss_per_epoch}',
-                                                             'mae_per_client_and_epoch': f'{self.cid}:{mae_per_epoch}',
-                                                             'val_loss_per_client_and_epoch': f'{self.cid}:{val_loss_per_epoch}',
-                                                             'val_mae_per_client_and_epoch': f'{self.cid}:{val_mae_per_epoch}'} if fit_metrics_agg else {}
-
-    def evaluate(self, parameters, config):
-        batch_size: int = config['batch_size']
-        self.model.set_weights(parameters)
-        loss, acc = self.model.evaluate(
-            self.x_val, 
-            self.y_val, 
-            batch_size=batch_size, 
-            verbose=verbose
-        )
-        return loss, len(self.x_val), {"accuracy": acc}
- 
- 
-def get_client_fn(dataset_partitions, model_hyperparameters):
-
-    def client_fn(cid: str) -> fl.client.Client:
-
-        x_train, y_train, x_val, y_val = dataset_partitions[int(cid)]
-
-        return FlowerClient(cid, x_train, y_train, x_val, y_val, model_hyperparameters).to_client()
-
-    return client_fn
- 
- 
- 
 class CustomFedAvg(fl.server.strategy.FedAvg):
     def aggregate_fit(self, rnd, results, failures):
 
@@ -121,33 +70,60 @@ def run_simulation(X_test, y_test, partitions, hyperparameters, fit_metrics_agg=
         "num_gpus": config['hw']['num_gpu'],
     }    
     
-    def fit_config(server_round: int):
-        config = {
+    if hyperparameters['model_name'] == 'xgb':
+    
+        def eval_config(rnd: int) -> Dict[str, str]:
+            """Return a configuration with global epochs."""
+            config = {
+                "global_round": str(rnd),
+            }
+            return config
+
+
+        def fit_config(rnd: int) -> Dict[str, str]:
+            """Return a configuration with global epochs."""
+            config = {
+                "global_round": str(rnd),
+            }
+            return config
+            
+        strategy = FedXgbBagging(
+            evaluate_function=get_evaluate_fn(X_test, y_test, hyperparameters, fit_metrics_agg, pv_w_flag) if X_test is not None else None,
+            min_fit_clients=int(config['fl']['min_fit_clients']),
+            min_available_clients=int(config['fl']['min_available_clients']),
+            min_evaluate_clients=int(config['fl']['min_evaluate_clients']),
+            on_evaluate_config_fn=eval_config,
+            on_fit_config_fn=fit_config,
+            evaluate_metrics_aggregation_fn=weighted_average
+        )
+    
+    else:
+        def fit_config(server_round: int):
+            config = {
             "batch_size": int(hyperparameters['batch_size']),
             "local_epochs": int(hyperparameters['local_epochs']),
             "fit_metrics_agg": fit_metrics_agg
-        }
-        return config
-    
-    
-    strategy = CustomFedAvg(
-        min_fit_clients=int(config['fl']['min_fit_clients']),  
-        min_evaluate_clients=int(config['fl']['min_evaluate_clients']),  
-        min_available_clients=int(config['fl']['min_available_clients']), 
-        evaluate_metrics_aggregation_fn=weighted_average,  
-        evaluate_fn=get_evaluate_fn(X_test, y_test, hyperparameters, fit_metrics_agg, pv_w_flag) if X_test is not None else None,  
-        fit_metrics_aggregation_fn=loss_per_client_epoch_fn if fit_metrics_agg else None,
-        on_fit_config_fn=fit_config,
-        on_evaluate_config_fn=fit_config
-    )
+            }
+            return config
+        
+        strategy = CustomFedAvg(
+            min_fit_clients=int(config['fl']['min_fit_clients']),  
+            min_evaluate_clients=int(config['fl']['min_evaluate_clients']),  
+            min_available_clients=int(config['fl']['min_available_clients']), 
+            evaluate_metrics_aggregation_fn=weighted_average,  
+            evaluate_fn=get_evaluate_fn(X_test, y_test, hyperparameters, fit_metrics_agg, pv_w_flag) if X_test is not None else None,  
+            fit_metrics_aggregation_fn=loss_per_client_epoch_fn if fit_metrics_agg else None,
+            on_fit_config_fn=fit_config,
+            on_evaluate_config_fn=fit_config
+        )
 
     history = fl.simulation.start_simulation(
-        client_fn=get_client_fn(partitions, hyperparameters),
+        client_fn=client_utils.get_client_fn(partitions, hyperparameters),
         num_clients=config['fl']['n_clients'],
         config=fl.server.ServerConfig(num_rounds=hyperparameters['n_rounds']),
         strategy=strategy,
         client_resources=client_resources,
-        actor_kwargs={'on_actor_init_fn': enable_tf_gpu_growth},
+        actor_kwargs={'on_actor_init_fn': enable_tf_gpu_growth if not hyperparameters['model_name'] == 'xgb' else None},
         ray_init_args = {"include_dashboard": False}
     )
     return history
@@ -159,7 +135,32 @@ def get_evaluate_fn(X_test, y_test, hyperparameters, save_model=False, pv_w_flag
         server_round: int,
         parameters: fl.common.NDArrays,
         config: Dict[str, fl.common.Scalar],
-    ):      
+    ):  
+        if hyperparameters['model_name'] == 'xgb':
+            params = hyperparameters.copy()
+            params.pop('num_local_round')
+            params.pop('model_name')
+            params.pop('n_rounds')
+            
+            test_data = xgb.DMatrix(X_test, label=y_test)
+            
+            if server_round == 0:
+                return 0, {}
+            else:
+                bst = xgb.Booster(params=params)
+                for para in parameters.tensors:
+                    para_b = bytearray(para)
+
+                bst.load_model(para_b)
+                eval_results = bst.eval_set(
+                    evals=[(test_data, "valid")],
+                    iteration=bst.num_boosted_rounds() - 1,
+                )
+                mae = round(float(eval_results.split("\t")[1].split(":")[1]), 4)
+                log(INFO, f"MAE = {mae} at round {server_round}")
+
+            return 0, {"accuracy": mae}
+            
         n_features = X_test.shape[2]
         model = models.get_model(n_features, 
                                  output_dim,
@@ -175,7 +176,7 @@ def get_evaluate_fn(X_test, y_test, hyperparameters, save_model=False, pv_w_flag
     return evaluate
 
     
-def get_partitions(path, files, kfolds=False):
+def get_partitions(path, files, model_name, kfolds=False):
     
     partitions = []
     for file in files:
@@ -183,7 +184,7 @@ def get_partitions(path, files, kfolds=False):
         if path[-3:] == 'pv_':
             data = preprocessing.germansolarfarm(data, 
                                                 config['data']['timestamp_col'], 
-                                                config['data']['target_col']) 
+                                                config['data']['target_col'])
         else:
             data = preprocessing.europewindfarm(data, 
                                                 config['data']['timestamp_col'], 
@@ -192,7 +193,14 @@ def get_partitions(path, files, kfolds=False):
         train_end = config['data']['train_end']
         test_start = config['data']['test_start']
         
-        X_train, y_train, X_val, y_val = preprocessing.make_windows(data, 
+        if model_name == 'xgb':
+            X_train, y_train, X_val, y_val = preprocessing.make_flat_windows(data, 
+                                                                            config['data']['target_col'], 
+                                                                            train_end, 
+                                                                            test_start, 
+                                                                            config['model']['output_dim'])    
+        else:
+            X_train, y_train, X_val, y_val = preprocessing.make_windows(data, 
                                                                     config['data']['target_col'], 
                                                                     train_end, 
                                                                     test_start, 
@@ -280,9 +288,47 @@ def loss_per_client_epoch_fn(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 def get_hyperparameters(model_name, hpo=False, trial=None, study=None):
     hyperparameters = {}
     hyperparameters['model_name'] = model_name
+    n_rounds = config['fl']['n_rounds']
+    
+    if model_name == 'xgb':
+        
+        hyperparameters['objective'] = config['model']['xgb']['objective']
+        hyperparameters['eval_metric'] = config['model']['xgb']['eval_metric']
+        
+        booster = config['model']['xgb']['booster']
+        eta = config['model']['xgb']['eta']
+        max_depth = config['model']['xgb']['max_depth']
+        #sum_parallel_tree = config['model']['xgb']['sum_parallel_tree']
+        subsample = config['model']['xgb']['subsample']
+        tree_method = config['model']['xgb']['tree_method']
+        num_local_round = config['model']['xgb']['num_local_round']
+        
+        if hpo:
+            
+            hyperparameters['n_rounds'] = trial.suggest_int('n_rounds', n_rounds[0], n_rounds[1])
+            #hyperparameters['booster'] = trial.suggest_categorical('booster', booster)
+            hyperparameters['eta'] = trial.suggest_float('eta', eta[0], eta[1])
+            hyperparameters['max_depth'] = trial.suggest_int('max_depth', max_depth[0], max_depth[1])
+            #hyperparameters['sum_parallel_tree'] = trial.suggest_int('sum_parallel_tree', sum_parallel_tree[0], sum_parallel_tree[1])
+            hyperparameters['subsample'] = trial.suggest_float('subsample', subsample[0], subsample[1])
+            hyperparameters['tree_method'] = trial.suggest_categorical('tree_method', tree_method)
+            hyperparameters['num_local_round'] = trial.suggest_int('num_local_round', num_local_round[0], num_local_round[1])
+            
+            return hyperparameters
+        
+        hyperparameters['n_rounds'] = n_rounds[0]
+        hyperparameters['booster'] = booster#[0]
+        hyperparameters['eta'] = eta[0]
+        hyperparameters['max_depth'] = max_depth[0]
+        #hyperparameters['sum_parallel_tree'] = sum_parallel_tree[0]
+        hyperparameters['subsample'] = subsample[0]
+        hyperparameters['tree_method'] = tree_method[0]
+        hyperparameters['num_local_round'] = num_local_round[0]
+        
+        return hyperparameters
+    
     batch_size = config['hpo']['batch_size']
     local_epochs = config['hpo']['local_epochs']
-    n_rounds = config['fl']['n_rounds']
     n_layers = config['hpo']['n_layers']
     learning_rate = config['hpo']['learning_rate']
     filters = config['hpo']['cnn']['filters']
@@ -329,13 +375,12 @@ def get_hyperparameters(model_name, hpo=False, trial=None, study=None):
     return hyperparameters
     
     
-def create_or_load_study(path, study_name, direction='minimize', sampler=optuna.samplers.TPESampler()):
+def create_or_load_study(path, study_name, direction):
     storage = 'sqlite:///'+path+study_name+'.db'
     study = optuna.create_study(
         storage=storage, 
         study_name=study_name,
         direction=direction,
-        sampler=sampler,
         load_if_exists=True
     )
 

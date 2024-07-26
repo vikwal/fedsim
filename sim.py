@@ -52,7 +52,14 @@ def main() -> None:
         test_data = preprocessing.europewindfarm(test_data, config['data']['timestamp_col'], config['data']['target_col'])
     
     if args.eval:
-        _, _, X_test, y_test = preprocessing.make_windows(test_data, 
+        if args.model == 'xgb':
+            _, _, X_test, y_test = preprocessing.make_flat_windows(test_data, 
+                                                                config['data']['target_col'], 
+                                                                len(test_data), # train_end,  
+                                                                0, # test_start, 
+                                                                config['model']['output_dim'])
+        else: 
+            _, _, X_test, y_test = preprocessing.make_windows(test_data, 
                                                             config['data']['target_col'], 
                                                             len(test_data), # train_end,  
                                                             0, # test_start, 
@@ -60,7 +67,7 @@ def main() -> None:
     else:
         X_test, y_test = None, None
     
-    partitions = utils.get_partitions(file_path, files, kfolds=args.kfolds)
+    partitions = utils.get_partitions(file_path, files, args.model, kfolds=args.kfolds)
         
     os.makedirs('results', exist_ok=True)
     
