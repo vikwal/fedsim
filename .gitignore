@@ -8,3 +8,9 @@ logs/*
 
 # pycache
 __pycache__/
+
+models
+
+studies
+
+results
