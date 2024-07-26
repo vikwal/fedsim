@@ -1,0 +1,10 @@
+# Logs
+logs
+*.log
+logs/*
+
+# macOS
+.DS_Store
+
+# pycache
+__pycache__/
