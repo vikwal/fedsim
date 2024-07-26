@@ -50,5 +50,5 @@ data:
   test_start: '2022-04-01' #'2022-01-01'
 
 hw:
-  num_cpu: 8
-  num_gpu: 0.5
+  num_cpu: 40
+  num_gpu: 1
