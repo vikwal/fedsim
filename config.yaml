@@ -1,0 +1,44 @@
+---
+fl:
+  n_clients: 4
+  n_rounds: [2, 10]
+  min_fit_clients: 4
+  min_available_clients: 4
+  min_evaluate_clients: 4
+  verbose: 0
+
+hpo:
+  trials: 1000
+  kfolds: 3
+  batch_size: [16, 256]
+  local_epochs: [2, 50]
+  n_layers: [1, 2, 3, 4]
+  learning_rate: [0.00001, 0.1]
+  fnn:
+    units: [32, 256]
+  cnn:
+    filters: [16, 64]
+    kernel_size: [2, 5]
+  rnn:
+    units: [16, 128]
+  
+
+model:
+  output_dim: 1
+  optimizer: 'adam'
+  loss: 'mse'
+  metrics: 'mae'
+
+data:
+  pv_path: './SolarFarm/'
+  pv_files: [1, 2, 3, 8, 5]
+  wind_path: './WindFarm/'
+  wind_files: [23, 29, 35, 15, 18]
+  target_col: 'power_normed' #'PROD_kW'
+  timestamp_col: 'timestamp' #'DATETIME_CET'
+  train_end: '2022-03-31' #'2021-12-31'
+  test_start: '2022-04-01' #'2022-01-01'
+
+hw:
+  num_cpu: 50
+  num_gpu: 1
