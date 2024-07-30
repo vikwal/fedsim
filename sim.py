@@ -80,7 +80,7 @@ def main() -> None:
         study = utils.create_or_load_study('studies/', args.data+'_'+args.model, direction='minimize')
         len_trials = len(study.trials)
         
-        for i in range(len_trials, len_trials + config['hpo']['trials']):
+        for i in range(len_trials, config['hpo']['trials']):
             
             log(20, f'\nTrial: {i}\n')
             
