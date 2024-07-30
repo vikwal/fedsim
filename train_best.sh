@@ -11,7 +11,7 @@ start_screen_session() {
     local session_name="${d}_${m}_${b}"
     local log_file="logs/output_${session_name}.log"
 
-    screen -dmS "$session_name" bash -c "source fedsim/bin/activate; python sim.py -d $d -m $m > $log_file 2>&1"
+    screen -dmS "$session_name" bash -c "source fedsim/bin/activate; python sim.py -d $d -m $m -e > $log_file 2>&1"
 }
 
 mkdir -p logs

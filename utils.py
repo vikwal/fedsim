@@ -176,7 +176,7 @@ def get_evaluate_fn(X_test, y_test, hyperparameters, save_model=False, pv_w_flag
     return evaluate
 
     
-def get_partitions(path, files, model_name, kfolds=False):
+def get_partitions(path, files, model_name='nn', kfolds=False):
     
     partitions = []
     for file in files:
@@ -194,18 +194,18 @@ def get_partitions(path, files, model_name, kfolds=False):
         test_start = config['data']['test_start']
         
         if model_name == 'xgb':
-            X_train, y_train, X_val, y_val = preprocessing.make_flat_windows(data, 
+            X_train, y_train, X_test, y_test = preprocessing.make_flat_windows(data, 
                                                                             config['data']['target_col'], 
                                                                             train_end, 
                                                                             test_start, 
                                                                             config['model']['output_dim'])    
         else:
-            X_train, y_train, X_val, y_val = preprocessing.make_windows(data, 
+            X_train, y_train, X_test, y_test = preprocessing.make_windows(data, 
                                                                     config['data']['target_col'], 
                                                                     train_end, 
                                                                     test_start, 
                                                                     config['model']['output_dim'])
-        partitions.append((X_train, y_train, X_val, y_val))
+        partitions.append((X_train, y_train, X_test, y_test))
         
     return partitions
 
@@ -216,7 +216,6 @@ def get_kfolds_partitions(n_splits, partitions):
     for part in partitions:
         folds = []
         X_train, y_train = part[0], part[1]
-        X_val, y_val = part[2], part[3]
         
         for train_index, val_index in tscv.split(X_train):
             X_train_fold, X_val_fold = X_train[train_index], X_train[val_index]
