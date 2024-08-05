@@ -159,6 +159,9 @@ def get_evaluate_fn(X_test, y_test, hyperparameters, save_model=False, pv_w_flag
                 mae = round(float(eval_results.split("\t")[1].split(":")[1]), 4)
                 log(INFO, f"MAE = {mae} at round {server_round}")
 
+            if server_round == hyperparameters['n_rounds'] and save_model:
+                bst.save_model('models/'+pv_w_flag+'_'+hyperparameters['model_name']+'.json')
+            
             return 0, {"accuracy": mae}
             
         n_features = X_test.shape[2]
