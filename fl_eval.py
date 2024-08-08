@@ -28,7 +28,7 @@ def compute_training(name, partitions, df, params, fl_model=True):
         if model_name == 'xgb':
             train_dmatrix = xgb.DMatrix(X_train, label=y_train)
             test_dmatrix = xgb.DMatrix(X_test, label=y_test)
-            num_local_rounds = 10#config['model']['xgb']['num_local_round'][0]
+            num_local_rounds = 50#config['model']['xgb']['num_local_round'][0]
             bst = xgb.Booster()
             
             if fl_model:
@@ -70,7 +70,7 @@ def compute_training(name, partitions, df, params, fl_model=True):
                 
             model.fit(X_train, 
                     y_train, 
-                    epochs=params['local_epochs'], 
+                    epochs=20,#params['local_epochs'], 
                     batch_size=params['batch_size'],
                     verbose=config['fl']['verbose'],
                     shuffle = False)
@@ -127,10 +127,10 @@ for name, study in zip(model_names, studies):
             continue
     
     if 'xgb' in name:
-        compute_training(name, w_xgb_partitions, fl_results)
+        compute_training(name, w_xgb_partitions, fl_results, params)
         compute_training(name, w_xgb_partitions, local_results, params, fl_model=False)
         continue
-    compute_training(name, w_partitions, fl_results)
+    compute_training(name, w_partitions, fl_results, params)
     compute_training(name, w_partitions, local_results, params, fl_model=False)
     
 fl_results.to_csv('results/fl_results.csv')

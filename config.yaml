@@ -34,16 +34,16 @@ model:
     eta: [0.01, 0.3]
     max_depth: [3, 10]
     eval_metric: 'mae'
-    sum_parallel_tree: [1, 2]
+    num_parallel_tree: [1, 2]
     subsample: [0.5, 1.0]
     tree_method: ['hist', 'approx', 'exact']
     num_local_round: [1, 10]
 
 data:
   pv_path: './SolarFarm/'
-  pv_files: [1, 2, 3, 8, 5]
+  pv_files: [1, 2, 3, 8, 20] # 5, 17, 20
   wind_path: './WindFarm/'
-  wind_files: [23, 29, 35, 15, 18]
+  wind_files: [23, 29, 35, 15, 22] # 18, 21, 22
   target_col: 'power_normed' #'PROD_kW'
   timestamp_col: 'timestamp' #'DATETIME_CET'
   train_end: '2022-03-31' #'2021-12-31'

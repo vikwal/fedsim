@@ -1,6 +1,6 @@
 #!/bin/bash
 
-configs=( "pv fnn" "pv cnn" "pv tcn" "pv lstm" "pv bilstm" )
+configs=( "pv fnn" "pv lstm" "pv bilstm" "w fnn")
 
 
 

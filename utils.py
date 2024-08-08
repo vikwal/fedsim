@@ -300,7 +300,7 @@ def get_hyperparameters(model_name, hpo=False, trial=None, study=None):
         booster = config['model']['xgb']['booster']
         eta = config['model']['xgb']['eta']
         max_depth = config['model']['xgb']['max_depth']
-        #sum_parallel_tree = config['model']['xgb']['sum_parallel_tree']
+        num_parallel_tree = config['model']['xgb']['num_parallel_tree']
         subsample = config['model']['xgb']['subsample']
         tree_method = config['model']['xgb']['tree_method']
         num_local_round = config['model']['xgb']['num_local_round']
@@ -311,7 +311,7 @@ def get_hyperparameters(model_name, hpo=False, trial=None, study=None):
             #hyperparameters['booster'] = trial.suggest_categorical('booster', booster)
             hyperparameters['eta'] = trial.suggest_float('eta', eta[0], eta[1])
             hyperparameters['max_depth'] = trial.suggest_int('max_depth', max_depth[0], max_depth[1])
-            #hyperparameters['sum_parallel_tree'] = trial.suggest_int('sum_parallel_tree', sum_parallel_tree[0], sum_parallel_tree[1])
+            hyperparameters['num_parallel_tree'] = trial.suggest_int('num_parallel_tree', num_parallel_tree[0], num_parallel_tree[1])
             hyperparameters['subsample'] = trial.suggest_float('subsample', subsample[0], subsample[1])
             hyperparameters['tree_method'] = trial.suggest_categorical('tree_method', tree_method)
             hyperparameters['num_local_round'] = trial.suggest_int('num_local_round', num_local_round[0], num_local_round[1])
@@ -322,7 +322,7 @@ def get_hyperparameters(model_name, hpo=False, trial=None, study=None):
         hyperparameters['booster'] = booster#[0]
         hyperparameters['eta'] = eta[0]
         hyperparameters['max_depth'] = max_depth[0]
-        #hyperparameters['sum_parallel_tree'] = sum_parallel_tree[0]
+        hyperparameters['num_parallel_tree'] = num_parallel_tree[0]
         hyperparameters['subsample'] = subsample[0]
         hyperparameters['tree_method'] = tree_method[0]
         hyperparameters['num_local_round'] = num_local_round[0]
