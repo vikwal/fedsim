@@ -8,6 +8,7 @@ from sklearn.model_selection import TimeSeriesSplit
 
 import flwr as fl
 from flwr.common import Metrics
+from flwr.common import Context
 from flwr.common.logger import log
 from flwr.simulation.ray_transport.utils import enable_tf_gpu_growth
 from flwr.common import (
@@ -185,8 +186,9 @@ class XgbClient(fl.client.Client):
  
 def get_client_fn(dataset_partitions, hyperparameters):
 
-    def client_fn(cid: str) -> fl.client.Client:
+    def client_fn(context: Context) -> fl.client.Client:
         
+        cid = int(context.node_config["partition-id"])
         x_train, y_train, x_val, y_val = dataset_partitions[int(cid)]
         
         if hyperparameters['model_name'] == 'xgb':
